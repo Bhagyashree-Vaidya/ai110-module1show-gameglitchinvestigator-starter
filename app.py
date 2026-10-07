@@ -24,6 +24,7 @@ def start_new_game(difficulty: str):
     st.session_state.status = "playing"
     st.session_state.history = []
     st.session_state.last_hint = None
+    st.session_state.celebrate = False
 
 
 st.set_page_config(page_title="Glitchy Guesser", page_icon="🎮")
@@ -97,6 +98,9 @@ if submit and st.session_state.status == "playing":
     if not ok:
         # Invalid input doesn't use up an attempt.
         st.error(err)
+    elif guess_int in st.session_state.history:
+        # FIX (Glitch 2): guessing the same number again used to cost an attempt.
+        st.warning(f"You already guessed {guess_int}. Try a different number.")
     else:
         st.session_state.attempts += 1
         st.session_state.history.append(guess_int)
@@ -111,7 +115,9 @@ if submit and st.session_state.status == "playing":
         )
 
         if outcome == "Win":
-            st.balloons()
+            # FIX (Glitch 1): st.balloons() right before st.rerun() was wiped out
+            # before it could play, so celebrate on the next run instead.
+            st.session_state.celebrate = True
             st.session_state.status = "won"
         elif st.session_state.attempts >= attempt_limit:
             st.session_state.status = "lost"
@@ -123,6 +129,10 @@ if submit and st.session_state.status == "playing":
 # and follows the checkbox instead of only flashing on the submit run.
 if show_hint and st.session_state.last_hint and st.session_state.status == "playing":
     st.warning(st.session_state.last_hint)
+
+if st.session_state.celebrate:
+    st.balloons()
+    st.session_state.celebrate = False
 
 if st.session_state.status == "won":
     st.success(

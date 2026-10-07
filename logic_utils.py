@@ -1,8 +1,16 @@
+import re
+
 ATTEMPT_LIMITS = {
     "Easy": 6,
     "Normal": 8,
-    "Hard": 5,
+    # FIX (Glitch 6): Hard gets the biggest range, so it has a few more attempts than before.
+    "Hard": 7,
 }
+
+# Only plain ASCII digits with an optional sign, e.g. "42", "-30", "+7".
+# Python's int() also accepts "1_0" and non-ASCII digits like "٥", which we don't want.
+WHOLE_NUMBER = re.compile(r"[+-]?[0-9]+")
+DECIMAL_NUMBER = re.compile(r"[+-]?([0-9]+\.[0-9]*|\.[0-9]+)")
 
 
 def get_range_for_difficulty(difficulty: str):
@@ -12,7 +20,8 @@ def get_range_for_difficulty(difficulty: str):
     if difficulty == "Normal":
         return 1, 100
     if difficulty == "Hard":
-        return 1, 50
+        # FIX (Glitch 6): Hard used to be 1-50, a smaller range than Normal.
+        return 1, 200
     return 1, 100
 
 
@@ -31,13 +40,19 @@ def parse_guess(raw: str, low: int = 1, high: int = 100):
         return False, None, "Enter a guess."
 
     raw = raw.strip()
-    try:
-        if "." in raw:
-            value = int(float(raw))
-        else:
-            value = int(raw)
-    except ValueError:
+
+    # FIX (Glitches 4 & 5): decimals used to be silently truncated ("50.9" -> 50),
+    # and "1_0" / "٥" slipped through int(). Only whole ASCII numbers are accepted now.
+    if DECIMAL_NUMBER.fullmatch(raw):
+        return False, None, "Enter a whole number (no decimals)."
+    if not WHOLE_NUMBER.fullmatch(raw):
         return False, None, "That is not a number."
+
+    try:
+        value = int(raw)
+    except ValueError:
+        # Python refuses to convert absurdly long digit strings (4300+ digits).
+        return False, None, f"Your guess must be between {low} and {high}."
 
     # FIX (Issue 1): reject numbers outside the difficulty's range, e.g. -30.
     if value < low or value > high:
@@ -67,10 +82,12 @@ def update_score(current_score: int, outcome: str, attempt_number: int):
 
     attempt_number is 1 for the first guess. A first-try win is worth 100,
     each extra attempt costs 10 (minimum 10). Every wrong guess costs 5.
+    A win always leaves you with at least 10 points in total.
     """
     if outcome == "Win":
         points = max(10, 100 - 10 * (attempt_number - 1))
-        return current_score + points
+        # FIX (Glitch 3): a late win could end with a negative score (e.g. -5).
+        return max(10, current_score + points)
 
     # FIX (Issue 3): "Too High" used to randomly *add* points on even attempts.
     if outcome in ("Too High", "Too Low"):

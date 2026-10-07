@@ -1,4 +1,10 @@
-from logic_utils import check_guess, get_attempt_limit, parse_guess, update_score
+from logic_utils import (
+    check_guess,
+    get_attempt_limit,
+    get_range_for_difficulty,
+    parse_guess,
+    update_score,
+)
 
 
 # --- check_guess (Issues 3 & 4) ---
@@ -69,3 +75,51 @@ def test_worst_case_easy_loss_bounded():
     for attempt in range(1, get_attempt_limit("Easy") + 1):
         score = update_score(score, "Too Low", attempt)
     assert score == -30
+
+
+# --- Glitch 3: a win never ends with a negative score ---
+
+def test_late_win_never_negative():
+    # 7 wrong guesses on Normal (-35), then a win on the 8th used to give -5.
+    score = 0
+    for attempt in range(1, 8):
+        score = update_score(score, "Too Low", attempt)
+    assert update_score(score, "Win", 8) == 10
+
+def test_early_win_unaffected_by_floor():
+    assert update_score(-5, "Win", 2) == 85
+
+
+# --- Glitches 4 & 5: only whole ASCII numbers are accepted ---
+
+def test_decimal_rejected_not_truncated():
+    ok, value, err = parse_guess("50.9", 1, 100)
+    assert not ok and value is None
+    assert "whole number" in err
+
+def test_trailing_dot_decimal_rejected():
+    assert parse_guess("100.0", 1, 100)[2] == "Enter a whole number (no decimals)."
+
+def test_python_only_number_formats_rejected():
+    for raw in ["1_0", "٥", "1e2", "0x10"]:
+        ok, _, err = parse_guess(raw, 1, 100)
+        assert not ok, raw
+        assert err == "That is not a number.", raw
+
+def test_huge_number_does_not_crash():
+    ok, _, err = parse_guess("9" * 5000, 1, 100)
+    assert not ok and "between 1 and 100" in err
+
+def test_plus_sign_still_accepted():
+    assert parse_guess("+5", 1, 100) == (True, 5, None)
+
+
+# --- Glitch 6: difficulty actually gets harder ---
+
+def test_ranges_grow_with_difficulty():
+    sizes = [get_range_for_difficulty(d)[1] for d in ("Easy", "Normal", "Hard")]
+    assert sizes == sorted(sizes) and len(set(sizes)) == 3
+
+def test_hard_settings():
+    assert get_range_for_difficulty("Hard") == (1, 200)
+    assert get_attempt_limit("Hard") == 7
